@@ -123,9 +123,12 @@ body {
   animation: subtle-pulse 2s ease-in-out infinite;
 }
 
-/* Safe area spacer for native status bar */
+/* Safe area spacers for native status bar / home bar */
 .safe-area-top {
   height: env(safe-area-inset-top, 0px);
+}
+.safe-area-bottom {
+  height: env(safe-area-inset-bottom, 0px);
 }
 
 /* Selection color */

@@ -258,6 +258,9 @@ export function Sidebar() {
   return (
     <>
       <div className="flex flex-col h-full overflow-hidden">
+        {/* Safe area spacer for status bar */}
+        <div className="shrink-0 bg-bg-secondary safe-area-top" />
+
         {/* Settings button + Provider status */}
         <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
           <ProviderStatusBadges />
@@ -282,6 +285,9 @@ export function Sidebar() {
         <div className="px-4 py-2.5 border-t border-border shrink-0">
           <ThemeToggle />
         </div>
+
+        {/* Safe area spacer for home bar */}
+        <div className="shrink-0 bg-bg-secondary safe-area-bottom" />
       </div>
 
       {/* Settings Modal */}
