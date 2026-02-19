@@ -22,10 +22,17 @@ export default function App() {
   const selectedDebateId = useHistoryStore((s) => s.selectedDebateId)
   const theme = useSettingsStore((s) => s.theme)
 
+  // Set StatusBar non-overlay on mount (must run once before anything renders)
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      void StatusBar.setOverlaysWebView({ overlay: false })
+    }
+  }, [])
+
+  // Sync theme colors with StatusBar
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     if (Capacitor.isNativePlatform()) {
-      void StatusBar.setOverlaysWebView({ overlay: false })
       void StatusBar.setStyle({ style: theme === 'dark' ? Style.Dark : Style.Light })
       void StatusBar.setBackgroundColor({
         color: theme === 'dark' ? '#191919' : '#ffffff',
