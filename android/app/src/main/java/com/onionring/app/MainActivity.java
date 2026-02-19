@@ -4,6 +4,11 @@ import android.os.Bundle;
 import android.os.PowerManager;
 import android.net.wifi.WifiManager;
 import android.content.Context;
+import android.view.View;
+
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.graphics.Insets;
 
 import com.getcapacitor.BridgeActivity;
 
@@ -15,6 +20,14 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Fix edge-to-edge overlap: apply system bar insets as padding to root view
+        View rootView = findViewById(android.R.id.content);
+        ViewCompat.setOnApplyWindowInsetsListener(rootView, (view, windowInsets) -> {
+            Insets insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
+            view.setPadding(insets.left, insets.top, insets.right, insets.bottom);
+            return WindowInsetsCompat.CONSUMED;
+        });
 
         // Keep CPU active while debate is running (even with screen off)
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
