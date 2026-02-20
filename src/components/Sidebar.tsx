@@ -167,6 +167,7 @@ function HistorySection() {
             onMouseLeave={() => setHoveredId(null)}
           >
             <div className="text-xs text-text-primary truncate pr-6 font-medium leading-relaxed">
+              {d.mode === 'artworkEval' && <span className="mr-1">🎨</span>}
               {d.topic}
             </div>
             <div className="flex items-center gap-2 mt-1.5">

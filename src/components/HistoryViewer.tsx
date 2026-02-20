@@ -10,6 +10,7 @@ const MODE_LABELS: Record<string, string> = {
   freeDiscussion: '자유 토론',
   roleAssignment: '역할 배정',
   battle: '결전모드',
+  artworkEval: '🎨 아트워크 평가',
 }
 
 export function HistoryViewer() {

@@ -1,11 +1,12 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Play, AlertCircle, FileText, Upload, X, Camera as CameraIcon, ImagePlus, Sparkles } from 'lucide-react'
+import { Play, AlertCircle, FileText, Upload, X, Camera as CameraIcon, ImagePlus, Sparkles, MessageSquare, Palette } from 'lucide-react'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useDebateStore } from '@/stores/debateStore'
 import { useHistoryStore } from '@/stores/historyStore'
 import { cn } from '@/lib/utils'
 import { generateId } from '@/lib/utils'
 import { isCameraAvailable, capturePhoto, pickFromGallery } from '@/lib/camera'
+import { ArtworkInput } from './ArtworkInput'
 import {
   PROVIDERS,
   PROVIDER_LABELS,
@@ -19,11 +20,16 @@ import {
   type ReferenceFile,
 } from '@/types'
 
+type FeatureType = 'debate' | 'artworkEval'
+
+const DEBATE_MODES: DiscussionMode[] = ['roundRobin', 'freeDiscussion', 'roleAssignment', 'battle']
+
 const MODE_LABELS: Record<DiscussionMode, string> = {
   roundRobin: '라운드 로빈',
   freeDiscussion: '자유 토론',
   roleAssignment: '역할 배정',
   battle: '⚔️ 결전모드',
+  artworkEval: '🎨 아트워크 평가',
 }
 
 const MODE_DESCRIPTIONS: Record<DiscussionMode, string> = {
@@ -31,6 +37,7 @@ const MODE_DESCRIPTIONS: Record<DiscussionMode, string> = {
   freeDiscussion: 'AI들이 자유롭게 서로의 의견에 반박/동의합니다',
   roleAssignment: '각 AI에 캐릭터/역할을 부여하여 토론합니다',
   battle: 'AI 2명이 대결하고 1명이 심판으로 채점합니다',
+  artworkEval: 'AI들이 아트워크를 평가하고 피드백합니다',
 }
 
 const DELAY_OPTIONS = [5, 10, 15, 30] as const
@@ -143,6 +150,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
 }
 
 export function TopicInput() {
+  const [featureType, setFeatureType] = useState<FeatureType>('debate')
   const [topic, setTopic] = useState('')
   const [mode, setMode] = useState<DiscussionMode>('roundRobin')
   const [maxRounds, setMaxRounds] = useState(3)
@@ -268,7 +276,41 @@ export function TopicInput() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-xl mx-auto px-6 py-10 space-y-8">
+      {/* Feature Type Toggle */}
+      <div className="max-w-xl mx-auto px-6 pt-8 pb-0">
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setFeatureType('debate')}
+            className={cn(
+              'flex items-center justify-center gap-2 px-3 py-2.5 text-xs rounded-xl border transition-all',
+              featureType === 'debate'
+                ? 'bg-accent/10 border-accent/40 text-accent font-semibold shadow-sm'
+                : 'bg-bg-surface border-border text-text-secondary hover:bg-bg-hover',
+            )}
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            AI 토론
+          </button>
+          <button
+            onClick={() => setFeatureType('artworkEval')}
+            className={cn(
+              'flex items-center justify-center gap-2 px-3 py-2.5 text-xs rounded-xl border transition-all',
+              featureType === 'artworkEval'
+                ? 'bg-accent/10 border-accent/40 text-accent font-semibold shadow-sm'
+                : 'bg-bg-surface border-border text-text-secondary hover:bg-bg-hover',
+            )}
+          >
+            <Palette className="w-3.5 h-3.5" />
+            아트워크 평가
+          </button>
+        </div>
+      </div>
+
+      {/* Artwork Evaluation Mode */}
+      {featureType === 'artworkEval' && <ArtworkInput />}
+
+      {/* Debate Mode */}
+      {featureType === 'debate' && <div className="max-w-xl mx-auto px-6 py-10 space-y-8">
         {/* Topic Suggestions */}
         <div className="space-y-3">
           <div className="flex items-center gap-2 justify-center">
@@ -309,7 +351,7 @@ export function TopicInput() {
         <div className="space-y-2.5">
           <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">토론 모드</label>
           <div className="grid grid-cols-2 gap-2">
-            {(Object.keys(MODE_LABELS) as DiscussionMode[]).map((m) => (
+            {DEBATE_MODES.map((m) => (
               <button
                 key={m}
                 onClick={() => setMode(m)}
@@ -692,7 +734,10 @@ export function TopicInput() {
           <Play className="w-4 h-4" />
           {mode === 'battle' ? '결전 시작' : '토론 시작'}
         </button>
-      </div>
+
+        {/* Safe area spacer for home bar */}
+        <div className="safe-area-bottom" />
+      </div>}
     </div>
   )
 }

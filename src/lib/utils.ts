@@ -38,6 +38,7 @@ const MODE_LABELS_MAP: Record<string, string> = {
   freeDiscussion: '자유 토론',
   roleAssignment: '역할 배정',
   battle: '결전모드',
+  artworkEval: '아트워크 평가',
 }
 
 export function formatDebateForShare(
@@ -49,7 +50,7 @@ export function formatDebateForShare(
 ): string {
   const lines: string[] = []
 
-  lines.push(`📋 AI 토론 기록`)
+  lines.push(mode === 'artworkEval' ? `🎨 아트워크 평가 기록` : `📋 AI 토론 기록`)
   lines.push(``)
   lines.push(`주제: ${topic}`)
   lines.push(`모드: ${MODE_LABELS_MAP[mode] || mode}`)

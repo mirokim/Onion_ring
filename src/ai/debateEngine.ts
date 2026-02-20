@@ -8,9 +8,115 @@ import type {
   ReferenceFile,
   ContentBlock,
 } from '@/types'
-import { PROVIDER_LABELS, ROLE_OPTIONS, ROLE_DESCRIPTIONS } from '@/types'
+import { PROVIDER_LABELS, ROLE_OPTIONS, ROLE_DESCRIPTIONS, ARTWORK_ROLE_OPTIONS, ARTWORK_ROLE_DESCRIPTIONS } from '@/types'
 import { callProvider } from './providers'
 import { generateId } from '@/lib/utils'
+
+// ── Artwork Evaluation Prompt Builder ──
+
+function buildArtworkSystemPrompt(
+  config: DiscussionConfig,
+  currentProvider: AIProvider,
+): string {
+  const label = PROVIDER_LABELS[currentProvider]
+  const participantList = config.participants
+    .map((p) => PROVIDER_LABELS[p])
+    .join(', ')
+
+  const contextNote = config.artworkContext
+    ? `\n작가/사용자 설명: "${config.artworkContext}"`
+    : ''
+
+  const baseRules = `정확성 및 신뢰성 원칙 (반드시 준수):
+- 사실 관계를 언급할 때는 반드시 출처를 밝히거나 링크를 제공하세요.
+- 사실, 이름, 도구, 기능, 날짜, 통계, 인용구, 출처 또는 예시를 절대 지어내지 마세요.
+- 모르는 정보에 대해서는 "확인이 필요합니다"라고 답하세요.
+- 확신도가 95% 미만인 정보는 불확실성을 명확히 밝히세요.`
+
+  const subMode = config.artworkSubMode || 'multiAiDiscussion'
+
+  switch (subMode) {
+    case 'multiAiDiscussion':
+      return `당신은 "${label}"입니다. 여러 AI가 참여하는 아트워크 평가 토론에 참가하고 있습니다.
+참여자: ${participantList}
+${contextNote}
+
+첨부된 이미지는 평가 대상 일러스트/드로잉 작품입니다.
+
+규칙:
+- 한국어로 답변하세요.
+- 작품에 대한 구체적이고 건설적인 비평을 제공하세요 (200~400자).
+- 다른 참여자의 의견을 구체적으로 언급하며 발전시키세요.
+- "[GPT]:", "[Claude]:", "[Gemini]:" 형식의 라벨은 다른 참여자의 발언입니다.
+- "[User]:" 라벨은 사용자의 개입입니다. 사용자의 질문이나 요청에 우선적으로 응답하세요.
+- 구도, 색감, 기법, 독창성, 감정 전달, 완성도 등 다양한 측면을 다루세요.
+- 강점과 개선점을 균형 있게 제시하세요.
+- 미술 이론이나 역사적 참고점이 있다면 언급하세요.
+
+${baseRules}`
+
+    case 'roleBasedIndividual': {
+      const roleConfig = config.roles.find((r) => r.provider === currentProvider)
+      const roleLabel = roleConfig?.role || '미술 비평가'
+      const roleOption = ARTWORK_ROLE_OPTIONS.find((r) => r.label === roleLabel)
+      const roleDescription = roleOption
+        ? ARTWORK_ROLE_DESCRIPTIONS[roleOption.value] || ''
+        : ''
+
+      return `당신은 "${roleLabel}" 역할의 "${label}"입니다.
+첨부된 이미지는 평가 대상 일러스트/드로잉 작품입니다.
+${contextNote}
+
+${roleDescription}
+
+규칙:
+- 한국어로 답변하세요.
+- 당신의 전문 분야 관점에서 독립적으로 이 작품을 평가하세요.
+- 다른 AI의 의견을 참고하지 말고 독자적 비평을 제공하세요.
+- 강점과 개선점을 구체적으로 제시하세요 (300~500자).
+- 전문가적 깊이와 함께 이해하기 쉬운 설명을 제공하세요.
+
+${baseRules}`
+    }
+
+    case 'scoreFeedback':
+      return `당신은 전문 미술 평가위원 "${label}"입니다.
+첨부된 이미지를 다음 평가 기준에 따라 채점하고 피드백을 제공하세요.
+${contextNote}
+
+다음 형식으로 정확히 답변하세요:
+
+📊 **평가 점수**
+
+| 항목 | 점수 (10점 만점) | 코멘트 |
+|------|-----------------|--------|
+| 구도 | X점 | 한줄 평가 |
+| 색감 | X점 | 한줄 평가 |
+| 독창성 | X점 | 한줄 평가 |
+| 기법 | X점 | 한줄 평가 |
+| 감정 전달 | X점 | 한줄 평가 |
+| 완성도 | X점 | 한줄 평가 |
+
+**총점**: XX / 60점
+
+💬 **종합 피드백**: (200~300자로 전반적인 평가와 개선 제안을 서술)
+
+🌟 **강점**: (가장 돋보이는 2-3가지)
+
+📝 **개선점**: (발전 가능한 2-3가지)
+
+규칙:
+- 한국어로 답변하세요.
+- 위 형식을 정확히 지켜주세요.
+- 각 항목의 점수는 1~10 사이의 정수로 부여하세요.
+- 코멘트는 구체적이고 건설적으로 작성하세요.
+
+${baseRules}`
+
+    default:
+      return `당신은 "${label}"입니다. 첨부된 이미지 작품을 평가해주세요.\n${baseRules}`
+  }
+}
 
 // ── System Prompt Builders ──
 
@@ -142,6 +248,10 @@ ${roleDescription}
       break
     }
 
+    case 'artworkEval':
+      prompt = buildArtworkSystemPrompt(config, currentProvider)
+      break
+
     default:
       prompt = base
   }
@@ -181,6 +291,7 @@ function buildApiMessages(
   currentProvider: AIProvider,
   referenceFiles: ReferenceFile[],
   isFirstCall: boolean,
+  isArtworkMode?: boolean,
 ): ApiMessage[] {
   const recent = allMessages.slice(-15)
   const fileBlocks = isFirstCall && referenceFiles.length > 0
@@ -189,7 +300,9 @@ function buildApiMessages(
 
   // If this is the first message (no history), add the topic as initial prompt
   if (recent.length === 0) {
-    const text = '토론을 시작해주세요. 주제에 대한 당신의 의견을 먼저 제시하세요.'
+    const text = isArtworkMode
+      ? '이 작품을 평가해주세요. 첨부된 이미지를 분석하고 피드백을 제공하세요.'
+      : '토론을 시작해주세요. 주제에 대한 당신의 의견을 먼저 제시하세요.'
     if (fileBlocks.length > 0) {
       return [{ role: 'user', content: [{ type: 'text', text }, ...fileBlocks] }]
     }
@@ -327,9 +440,16 @@ export async function runDebate(
 
   // Battle mode: separate debaters from judge
   const isBattleMode = config.mode === 'battle' && !!config.judgeProvider
+  const isArtworkMode = config.mode === 'artworkEval'
   const turnParticipants = isBattleMode
     ? config.participants.filter((p) => p !== config.judgeProvider)
     : config.participants
+
+  // For artwork individual/score sub-modes, force 1 round
+  const effectiveMaxRounds = isArtworkMode
+    && (config.artworkSubMode === 'roleBasedIndividual' || config.artworkSubMode === 'scoreFeedback')
+    ? 1
+    : config.maxRounds
 
   // Helper: get role name for a provider
   const getRoleName = (provider: AIProvider): string | undefined => {
@@ -340,12 +460,28 @@ export async function runDebate(
       const rc = config.roles.find((r) => r.provider === provider)
       if (rc?.role && rc.role !== '중립') return rc.role
     }
+    if (isArtworkMode && config.artworkSubMode === 'roleBasedIndividual') {
+      const rc = config.roles.find((r) => r.provider === provider)
+      if (rc?.role) return rc.role
+    }
     return undefined
+  }
+
+  // Helper: get message type for artwork mode
+  const getArtworkMessageType = (): 'artwork-critique' | 'artwork-score' | undefined => {
+    if (!isArtworkMode) return undefined
+    if (config.artworkSubMode === 'scoreFeedback') return 'artwork-score'
+    return 'artwork-critique'
   }
 
   callbacks.onStatusChange('running')
 
-  for (let round = 1; round <= config.maxRounds; round++) {
+  // Merge artworkFile into referenceFiles for image sending
+  const effectiveRefFiles = isArtworkMode && config.artworkFile
+    ? [config.artworkFile, ...config.referenceFiles]
+    : config.referenceFiles
+
+  for (let round = 1; round <= effectiveMaxRounds; round++) {
     // ── Debater turns ──
     for (let turnIndex = 0; turnIndex < turnParticipants.length; turnIndex++) {
       // Check abort
@@ -371,8 +507,9 @@ export async function runDebate(
       const apiMessages = buildApiMessages(
         callbacks.getMessages(),
         provider,
-        config.referenceFiles,
+        effectiveRefFiles,
         isFirstCall,
+        isArtworkMode,
       )
 
       // Call the AI
@@ -399,6 +536,7 @@ export async function runDebate(
         round,
         timestamp: Date.now(),
         error: isError ? response.content : undefined,
+        messageType: getArtworkMessageType(),
         roleName: getRoleName(provider),
       }
 

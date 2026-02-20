@@ -15,9 +15,10 @@ export interface AIConfig {
 
 // ── Discussion Types ──
 
-export type DiscussionMode = 'roundRobin' | 'freeDiscussion' | 'roleAssignment' | 'battle'
+export type DiscussionMode = 'roundRobin' | 'freeDiscussion' | 'roleAssignment' | 'battle' | 'artworkEval'
 export type DiscussionStatus = 'idle' | 'running' | 'paused' | 'completed' | 'error'
-export type MessageType = 'debate' | 'judge-evaluation'
+export type ArtworkEvalSubMode = 'multiAiDiscussion' | 'roleBasedIndividual' | 'scoreFeedback'
+export type MessageType = 'debate' | 'judge-evaluation' | 'artwork-critique' | 'artwork-score'
 
 export interface RoleConfig {
   provider: AIProvider
@@ -51,6 +52,10 @@ export interface DiscussionConfig {
   useReference: boolean
   referenceFiles: ReferenceFile[]
   pacing: PacingConfig
+  // Artwork evaluation
+  artworkSubMode?: ArtworkEvalSubMode
+  artworkFile?: ReferenceFile
+  artworkContext?: string
 }
 
 export interface DiscussionMessage {
@@ -273,3 +278,53 @@ export const ROLE_DESCRIPTIONS: Record<string, string> = {
   conspiracy: '음모론자처럼 말하세요. "생각해 보세요, 이건 우연이 아닙니다!", "누군가 이 정보를 숨기고 있어요" 같은 의심 가득한 어투를 사용하세요. 재미있되 지나치지 않게 하세요.',
   philosopher: '고대 철학자처럼 말하세요. "그렇다면 존재의 본질에 대해 물어야 합니다", "소크라테스라면 이렇게 질문했을 것입니다..." 같은 심오한 어투를 사용하세요. 모든 논제를 근본적 질문으로 되돌리세요.',
 }
+
+// ── Artwork Evaluation Role Options ──
+
+export const ARTWORK_ROLE_OPTIONS = [
+  { value: 'artCritic', label: '미술 비평가' },
+  { value: 'curator', label: '큐레이터' },
+  { value: 'generalAudience', label: '일반 관객' },
+  { value: 'technicalExpert', label: '기술 전문가' },
+  { value: 'emotionAnalyst', label: '감성 분석가' },
+  { value: 'artHistorian', label: '미술사학자' },
+  { value: 'illustrationPro', label: '일러스트 전문가' },
+  { value: 'colorist', label: '색채 전문가' },
+] as const
+
+export const ARTWORK_ROLE_GROUPS = [
+  {
+    label: '🎨 비평 전문가',
+    roles: ['artCritic', 'curator', 'artHistorian'],
+  },
+  {
+    label: '🔍 기술 분석',
+    roles: ['technicalExpert', 'illustrationPro', 'colorist'],
+  },
+  {
+    label: '💫 감성/관객',
+    roles: ['emotionAnalyst', 'generalAudience'],
+  },
+] as const
+
+export const ARTWORK_ROLE_DESCRIPTIONS: Record<string, string> = {
+  artCritic: '전문 미술 비평가로서 작품의 미학적 가치, 표현 기법, 구도, 색채를 분석하세요. 미술 이론과 역사적 맥락을 참고하여 비평하세요.',
+  curator: '미술관 큐레이터로서 이 작품의 전시 가치, 시장성, 관객 어필도를 평가하세요. 현대 미술 트렌드와 비교 분석하세요.',
+  generalAudience: '미술 전문 지식 없이 일반 관객의 시각으로 작품을 감상하세요. 첫인상, 감정적 반응, 이해도를 솔직하게 표현하세요.',
+  technicalExpert: '기술적 전문가로서 드로잉 기법, 선의 품질, 비례, 원근법, 명암 처리 등 기술적 측면을 상세히 분석하세요.',
+  emotionAnalyst: '작품이 전달하는 감정과 분위기를 분석하세요. 색채 심리학, 구도의 정서적 효과, 감상자에게 미치는 영향을 설명하세요.',
+  artHistorian: '미술사학자로서 이 작품의 스타일을 역사적 사조와 연결지어 분석하세요. 영향 받은 화가나 시대를 추론하세요.',
+  illustrationPro: '일러스트레이션 전문가로서 캐릭터 디자인, 스토리텔링, 시각적 내러티브, 상업적 완성도를 평가하세요.',
+  colorist: '색채 전문가로서 팔레트 선택, 색상 조화, 대비, 채도, 색온도의 효과를 분석하세요.',
+}
+
+// ── Artwork Score Categories ──
+
+export const ARTWORK_SCORE_CATEGORIES = [
+  { name: '구도', nameEn: 'Composition', weight: 3 },
+  { name: '색감', nameEn: 'Color', weight: 3 },
+  { name: '독창성', nameEn: 'Originality', weight: 3 },
+  { name: '기법', nameEn: 'Technique', weight: 2 },
+  { name: '감정 전달', nameEn: 'Emotional Impact', weight: 2 },
+  { name: '완성도', nameEn: 'Completeness', weight: 2 },
+] as const

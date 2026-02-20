@@ -179,7 +179,7 @@ export function ControlBar() {
             className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-accent bg-accent/10 rounded-lg hover:bg-accent/20 transition"
           >
             <Plus className="w-3.5 h-3.5" />
-            새 토론
+            {config?.mode === 'artworkEval' ? '새 평가' : '새 토론'}
           </button>
         )}
       </div>

@@ -12,11 +12,16 @@ export function MessageBubble({ message }: Props) {
   const isUser = message.provider === 'user'
   const isError = !!message.error
   const isJudgeEval = message.messageType === 'judge-evaluation'
+  const isArtworkCritique = message.messageType === 'artwork-critique'
+  const isArtworkScore = message.messageType === 'artwork-score'
+  const isArtwork = isArtworkCritique || isArtworkScore
   const color = isUser ? '#fbbf24' : PROVIDER_COLORS[message.provider as AIProvider]
   const label = isUser ? 'You' : PROVIDER_LABELS[message.provider as AIProvider]
   const [expandedImage, setExpandedImage] = useState<string | null>(null)
 
   const judgeColor = '#f59e0b' // amber-500
+  const artworkCritiqueColor = '#14b8a6' // teal-500
+  const artworkScoreColor = '#a855f7' // purple-500
 
   return (
     <>
@@ -24,11 +29,13 @@ export function MessageBubble({ message }: Props) {
         'flex gap-3 group',
         isError && 'opacity-50',
         isJudgeEval && 'bg-warning/5 rounded-xl p-3 border border-warning/20',
+        isArtworkCritique && 'bg-[#14b8a6]/5 rounded-xl p-3 border border-[#14b8a6]/20',
+        isArtworkScore && 'bg-[#a855f7]/5 rounded-xl p-3 border border-[#a855f7]/20',
       )}>
         {/* Color bar */}
         <div
-          className={cn('shrink-0 rounded-full', isJudgeEval ? 'w-1' : 'w-0.5')}
-          style={{ backgroundColor: isJudgeEval ? judgeColor : color }}
+          className={cn('shrink-0 rounded-full', (isJudgeEval || isArtwork) ? 'w-1' : 'w-0.5')}
+          style={{ backgroundColor: isJudgeEval ? judgeColor : isArtworkScore ? artworkScoreColor : isArtworkCritique ? artworkCritiqueColor : color }}
         />
 
         {/* Content */}
@@ -36,14 +43,29 @@ export function MessageBubble({ message }: Props) {
           <div className="flex items-center gap-2 mb-1.5">
             <span
               className="text-[11px] font-semibold tracking-wide"
-              style={{ color: isJudgeEval ? judgeColor : color }}
+              style={{ color: isJudgeEval ? judgeColor : isArtworkScore ? artworkScoreColor : isArtworkCritique ? artworkCritiqueColor : color }}
             >
               {label}
             </span>
-            {/* 역할 배지 (역할 배정 모드) */}
-            {message.roleName && !isJudgeEval && (
+            {/* 역할 배지 (역할 배정 모드 / 아트워크 역할별 평가) */}
+            {message.roleName && !isJudgeEval && !isArtwork && (
               <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-accent/10 text-accent">
                 {message.roleName}
+              </span>
+            )}
+            {message.roleName && isArtworkCritique && (
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[#14b8a6]/15 text-[#14b8a6]">
+                🎨 {message.roleName}
+              </span>
+            )}
+            {isArtworkCritique && !message.roleName && (
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[#14b8a6]/15 text-[#14b8a6]">
+                🎨 비평
+              </span>
+            )}
+            {isArtworkScore && (
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#a855f7]/15 text-[#a855f7]">
+                📊 채점
               </span>
             )}
             {isJudgeEval && (
