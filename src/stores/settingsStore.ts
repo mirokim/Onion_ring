@@ -48,6 +48,24 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'debate-settings',
       storage: createJSONStorage(() => secureStorage),
+      merge: (persisted, current) => {
+        const p = persisted as Partial<SettingsState>
+        const merged = { ...current, ...p }
+        // Ensure newly added providers get default configs
+        const configs = { ...current.configs, ...p.configs }
+        for (const provider of PROVIDERS) {
+          if (!configs[provider]) {
+            configs[provider] = {
+              provider,
+              apiKey: '',
+              model: DEFAULT_MODELS[provider],
+              enabled: false,
+            }
+          }
+        }
+        merged.configs = configs
+        return merged
+      },
     },
   ),
 )
