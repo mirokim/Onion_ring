@@ -137,20 +137,15 @@ function ProviderCard({ provider }: { provider: AIProvider }) {
 // ── History Section ──
 
 function HistorySection() {
-  // Optimized: Group related historyStore selectors to reduce re-renders
-  const { debates, selectDebate, deleteDebate, loadDebates, loadMore, hasMore, isLoading, error, clearError } = useHistoryStore(
-    (s) => ({
-      debates: s.debates,
-      selectDebate: s.selectDebate,
-      deleteDebate: s.deleteDebate,
-      loadDebates: s.loadDebates,
-      loadMore: s.loadMore,
-      hasMore: s.hasMore,
-      isLoading: s.isLoading,
-      error: s.error,
-      clearError: s.clearError,
-    }),
-  )
+  const debates = useHistoryStore((s) => s.debates)
+  const hasMore = useHistoryStore((s) => s.hasMore)
+  const isLoading = useHistoryStore((s) => s.isLoading)
+  const error = useHistoryStore((s) => s.error)
+  const selectDebate = useHistoryStore((s) => s.selectDebate)
+  const deleteDebate = useHistoryStore((s) => s.deleteDebate)
+  const loadDebates = useHistoryStore((s) => s.loadDebates)
+  const loadMore = useHistoryStore((s) => s.loadMore)
+  const clearError = useHistoryStore((s) => s.clearError)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [initialLoad, setInitialLoad] = useState(true)
 

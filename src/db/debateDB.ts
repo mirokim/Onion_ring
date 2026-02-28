@@ -244,28 +244,22 @@ class DebateDB {
 
     this.db.run('CREATE INDEX IF NOT EXISTS idx_messages_debate ON messages(debate_id)')
     this.db.run('CREATE INDEX IF NOT EXISTS idx_debates_created ON debates(created_at)')
-    this.db.run('CREATE INDEX IF NOT EXISTS idx_reffiles_debate ON reference_files(debate_id)')
 
-    // Migration: add message_type column if it doesn't exist
+    // Migrations — must run before creating indexes on migrated columns
     try {
       this.db.run('ALTER TABLE messages ADD COLUMN message_type TEXT DEFAULT NULL')
-    } catch {
-      // Column already exists, ignore
-    }
+    } catch { /* already exists */ }
 
-    // Migration: add role_name column if it doesn't exist
     try {
       this.db.run('ALTER TABLE messages ADD COLUMN role_name TEXT DEFAULT NULL')
-    } catch {
-      // Column already exists, ignore
-    }
+    } catch { /* already exists */ }
 
-    // Migration: add debate_id column to reference_files if it doesn't exist
     try {
       this.db.run('ALTER TABLE reference_files ADD COLUMN debate_id TEXT DEFAULT NULL')
-    } catch {
-      // Column already exists, ignore
-    }
+    } catch { /* already exists */ }
+
+    // Index on reference_files(debate_id) must come after the migration above
+    this.db.run('CREATE INDEX IF NOT EXISTS idx_reffiles_debate ON reference_files(debate_id)')
   }
 
   // ── Query Helpers (Onion Editor pattern) ──
