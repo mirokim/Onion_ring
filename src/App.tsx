@@ -18,11 +18,8 @@ const isMobile = Capacitor.isNativePlatform() || window.innerWidth < 768
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile)
-  // Optimized: Group debate store selectors
-  const { status, topic } = useDebateStore((s) => ({
-    status: s.status,
-    topic: s.config?.topic,
-  }))
+  const status = useDebateStore((s) => s.status)
+  const topic = useDebateStore((s) => s.config?.topic)
   const selectedDebateId = useHistoryStore((s) => s.selectedDebateId)
   const theme = useSettingsStore((s) => s.theme)
 

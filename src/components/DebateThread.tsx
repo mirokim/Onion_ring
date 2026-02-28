@@ -26,11 +26,8 @@ function TypingIndicator({ provider }: { provider: AIProvider }) {
 }
 
 export function DebateThread() {
-  // Optimized: Group debateStore selectors
-  const { messages, loadingProvider } = useDebateStore((s) => ({
-    messages: s.messages,
-    loadingProvider: s.loadingProvider,
-  }))
+  const messages = useDebateStore((s) => s.messages)
+  const loadingProvider = useDebateStore((s) => s.loadingProvider)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll on new messages

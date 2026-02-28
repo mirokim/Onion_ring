@@ -14,13 +14,10 @@ const MODE_LABELS: Record<string, string> = {
 }
 
 export function HistoryViewer() {
-  // Optimized: Group historyStore selectors
-  const { selectedDebateId, selectedMessages, debates, clearSelection } = useHistoryStore((s) => ({
-    selectedDebateId: s.selectedDebateId,
-    selectedMessages: s.selectedMessages,
-    debates: s.debates,
-    clearSelection: s.clearSelection,
-  }))
+  const selectedDebateId = useHistoryStore((s) => s.selectedDebateId)
+  const selectedMessages = useHistoryStore((s) => s.selectedMessages)
+  const debates = useHistoryStore((s) => s.debates)
+  const clearSelection = useHistoryStore((s) => s.clearSelection)
   const [shareStatus, setShareStatus] = useState<'idle' | 'copied' | 'shared' | 'failed'>('idle')
 
   const debate = debates.find((d) => d.id === selectedDebateId)
