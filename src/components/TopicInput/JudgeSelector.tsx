@@ -13,7 +13,7 @@ export function JudgeSelector({ selectedProviders, judgeProvider, onSelectJudge 
       <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
         ⚖️ 심판 AI 선택
       </label>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {selectedProviders.map((p) => {
           const isJudge = judgeProvider === p
           return (

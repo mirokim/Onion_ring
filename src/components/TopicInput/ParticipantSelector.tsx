@@ -33,7 +33,7 @@ export function ParticipantSelector({
         </div>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {enabledProviders.map((p) => {
           const selected = selectedProviders.includes(p)
           return (
