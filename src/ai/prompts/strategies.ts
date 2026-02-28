@@ -6,7 +6,7 @@
 import type { AIProvider, DiscussionConfig } from '@/types'
 import { PROVIDER_LABELS } from '@/types'
 import { SYSTEM_PROMPT_CONFIG } from '@/constants'
-import { getRoleLabel, getRoleDescription } from '@/lib/roleHelpers'
+import { getRoleLabel, getRoleDescription, getArtworkRoleDescription, getArtworkRoleValue } from '@/lib/roleHelpers'
 
 export interface PromptStrategy {
   build(config: DiscussionConfig, currentProvider: AIProvider): string
@@ -212,9 +212,8 @@ ${SYSTEM_PROMPT_CONFIG.ACCURACY_RULES}`
 
       case 'roleBasedIndividual': {
         const roleConfig = config.roles.find((r) => r.provider === currentProvider)
-        const roleValue = roleConfig?.role || '미술 비평가'
-        const roleLabel = getRoleLabel(roleValue)
-        const roleDescription = getRoleDescription(roleValue)
+        const roleLabel = roleConfig?.role || '미술 비평가'
+        const roleDescription = getArtworkRoleDescription(getArtworkRoleValue(roleLabel))
 
         prompt = `당신은 "${roleLabel}" 역할의 "${label}"입니다.
 첨부된 이미지는 평가 대상 일러스트/드로잉 작품입니다.

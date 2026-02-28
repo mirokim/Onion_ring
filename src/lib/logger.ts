@@ -3,37 +3,16 @@ import { Capacitor } from '@capacitor/core'
 
 // Determine log level based on environment
 const isDev = process.env.NODE_ENV === 'development'
-const isTest = process.env.NODE_ENV === 'test'
 const logLevel = isDev ? 'debug' : 'info'
 
-// Browser transport for pino (skip in test environment)
-let transport: any = undefined
-if (isDev && !isTest) {
-  try {
-    transport = pino.transport({
-      target: 'pino-pretty',
-      options: {
-        colorize: true,
-        translateTime: 'SYS:standard',
-        ignore: 'pid,hostname',
-        singleLine: false,
-        messageFormat: '{levelLabel} - {msg}',
-      },
-    })
-  } catch (error) {
-    // Fallback if pino-pretty is not available
-    console.warn('pino-pretty not available, using default transport')
-  }
-}
-
-// Create logger instance
-const pinoLogger = pino(
-  {
-    level: logLevel,
-    timestamp: pino.stdTimeFunctions.isoTime,
+// Create logger instance (browser-compatible: no pino.destination / pino.transport)
+const pinoLogger = pino({
+  level: logLevel,
+  timestamp: pino.stdTimeFunctions.isoTime,
+  browser: {
+    asObject: false,
   },
-  transport || pino.destination(),
-)
+})
 
 // ── Structured Logger ──
 export interface LogContext {
