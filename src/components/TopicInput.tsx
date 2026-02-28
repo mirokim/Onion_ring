@@ -8,6 +8,7 @@ import { RoleSelector } from './TopicInput/RoleSelector'
 import { ParticipantSelector } from './TopicInput/ParticipantSelector'
 import { JudgeSelector } from './TopicInput/JudgeSelector'
 import { ReferenceTracker } from './TopicInput/ReferenceTracker'
+import { FileUploader } from './TopicInput/FileUploader'
 import { PacingSelector } from './TopicInput/PacingSelector'
 import { useDebateConfig } from './TopicInput/useDebateConfig'
 import { useDebateStore } from '@/stores/debateStore'
@@ -137,8 +138,8 @@ export function TopicInput() {
         : [],
       judgeProvider: debateConfig.mode === 'battle' ? debateConfig.judgeProvider ?? undefined : undefined,
       referenceText: debateConfig.useReference ? debateConfig.referenceText : '',
-      useReference: debateConfig.useReference,
-      referenceFiles: debateConfig.useReference ? debateConfig.referenceFiles : [],
+      useReference: debateConfig.useReference || debateConfig.referenceFiles.length > 0,
+      referenceFiles: debateConfig.referenceFiles,
       pacing: {
         mode: debateConfig.pacingMode,
         autoDelaySeconds: debateConfig.autoDelay,
@@ -218,6 +219,11 @@ export function TopicInput() {
               className="w-full px-4 py-3 text-sm bg-bg-surface border border-border rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent/40 transition placeholder:text-text-muted/60"
               rows={3}
             />
+            <FileUploader
+              referenceFiles={debateConfig.referenceFiles}
+              onFilesChange={debateConfig.setReferenceFiles}
+              onRemoveFile={debateConfig.removeReferenceFile}
+            />
           </div>
 
           {/* Debate Mode and Rounds */}
@@ -265,9 +271,6 @@ export function TopicInput() {
             onUseReferenceChange={debateConfig.setUseReference}
             referenceText={debateConfig.referenceText}
             onReferenceTextChange={debateConfig.setReferenceText}
-            referenceFiles={debateConfig.referenceFiles}
-            onReferenceFilesChange={debateConfig.setReferenceFiles}
-            onRemoveFile={debateConfig.removeReferenceFile}
           />
 
           {/* Pacing */}
