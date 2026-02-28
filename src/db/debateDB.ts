@@ -7,6 +7,7 @@ import type { Database, SqlJsStatic, SqlValue } from 'sql.js'
 import type { AIProvider, DiscussionMode } from '@/types'
 import { Capacitor } from '@capacitor/core'
 import { App as CapApp } from '@capacitor/app'
+import { DATABASE_CONFIG } from '@/constants'
 
 // ── Stored Types ──
 
@@ -37,6 +38,7 @@ export interface StoredMessage {
 
 export interface StoredReferenceFile {
   id: string
+  debateId: string
   filename: string
   mimeType: string
   size: number
@@ -55,21 +57,28 @@ async function loadSqlJs(): Promise<SqlJsStatic> {
     if (import.meta.env.DEV) {
       return '/sql-wasm.wasm'
     }
-    return new URL('./sql-wasm.wasm', window.location.href).href
+    // Use origin (e.g. https://localhost) for reliable resolution on Capacitor
+    const base = window.location.origin + '/'
+    return new URL('sql-wasm.wasm', base).href
   })()
+
+  console.log('[SQLite] Loading WASM from:', wasmUrl)
 
   return initSqlJs({
     locateFile: () => wasmUrl,
   })
 }
 
-// ── IndexedDB persistence helpers ──
+// ── IndexedDB persistence helpers (cached handle) ──
 
-const IDB_NAME = 'OnionRingDebateStore'
-const IDB_STORE = 'databases'
-const IDB_KEY = 'debate-main-db'
+const IDB_NAME = DATABASE_CONFIG.IDB_NAME
+const IDB_STORE = DATABASE_CONFIG.IDB_STORE
+const IDB_KEY = DATABASE_CONFIG.IDB_KEY
+
+let cachedIDB: IDBDatabase | null = null
 
 function openIDB(): Promise<IDBDatabase> {
+  if (cachedIDB) return Promise.resolve(cachedIDB)
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(IDB_NAME, 1)
     req.onupgradeneeded = () => {
@@ -78,7 +87,11 @@ function openIDB(): Promise<IDBDatabase> {
         db.createObjectStore(IDB_STORE)
       }
     }
-    req.onsuccess = () => resolve(req.result)
+    req.onsuccess = () => {
+      cachedIDB = req.result
+      cachedIDB.onclose = () => { cachedIDB = null }
+      resolve(cachedIDB)
+    }
     req.onerror = () => reject(new Error('Failed to open IndexedDB'))
   })
 }
@@ -91,9 +104,13 @@ async function loadDatabaseFromIDB(): Promise<Uint8Array | null> {
       const store = tx.objectStore(IDB_STORE)
       const getReq = store.get(IDB_KEY)
       getReq.onsuccess = () => resolve(getReq.result || null)
-      getReq.onerror = () => resolve(null)
+      getReq.onerror = () => {
+        console.warn('[SQLite] IndexedDB get failed:', getReq.error)
+        resolve(null)
+      }
     })
-  } catch {
+  } catch (err) {
+    console.warn('[SQLite] Failed to load from IndexedDB:', err)
     return null
   }
 }
@@ -129,7 +146,10 @@ class DebateDB {
 
   async init(): Promise<void> {
     if (this.initPromise) return this.initPromise
-    this.initPromise = this._doInit()
+    this.initPromise = this._doInit().catch((err) => {
+      this.initPromise = null // Reset so next call can retry
+      throw err
+    })
     return this.initPromise
   }
 
@@ -160,9 +180,18 @@ class DebateDB {
         }
       })
     } else {
+      // visibilitychange fires reliably before tab close and allows async work
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden' && this.dirty && this.db) {
+          void this._persist()
+        }
+      })
+      // beforeunload as best-effort fallback (fire-and-forget)
       window.addEventListener('beforeunload', () => {
         if (this.dirty && this.db) {
-          this._persistSync()
+          const data = this.db.export()
+          void saveDatabaseToIDB(data)
+          this.dirty = false
         }
       })
     }
@@ -203,6 +232,7 @@ class DebateDB {
     this.db.run(`
       CREATE TABLE IF NOT EXISTS reference_files (
         id TEXT PRIMARY KEY,
+        debate_id TEXT,
         filename TEXT NOT NULL,
         mime_type TEXT NOT NULL,
         size INTEGER NOT NULL,
@@ -214,6 +244,7 @@ class DebateDB {
 
     this.db.run('CREATE INDEX IF NOT EXISTS idx_messages_debate ON messages(debate_id)')
     this.db.run('CREATE INDEX IF NOT EXISTS idx_debates_created ON debates(created_at)')
+    this.db.run('CREATE INDEX IF NOT EXISTS idx_reffiles_debate ON reference_files(debate_id)')
 
     // Migration: add message_type column if it doesn't exist
     try {
@@ -225,6 +256,13 @@ class DebateDB {
     // Migration: add role_name column if it doesn't exist
     try {
       this.db.run('ALTER TABLE messages ADD COLUMN role_name TEXT DEFAULT NULL')
+    } catch {
+      // Column already exists, ignore
+    }
+
+    // Migration: add debate_id column to reference_files if it doesn't exist
+    try {
+      this.db.run('ALTER TABLE reference_files ADD COLUMN debate_id TEXT DEFAULT NULL')
     } catch {
       // Column already exists, ignore
     }
@@ -242,21 +280,6 @@ class DebateDB {
     }
     stmt.free()
     return results
-  }
-
-  // @ts-expect-error -- reserved for future use
-  private _queryOne<T>(sql: string, params: SqlValue[] = []): T | null {
-    const results = this._queryAll<T>(sql, params)
-    return results[0] ?? null
-  }
-
-  private _run(sql: string, params: SqlValue[] = []): void {
-    if (!this.db) throw new Error('Database not initialized')
-    const stmt = this.db.prepare(sql)
-    if (params.length > 0) stmt.bind(params)
-    stmt.step()
-    stmt.free()
-    this._markDirty()
   }
 
   // ── Persistence ──
@@ -282,13 +305,6 @@ class DebateDB {
       console.error('[SQLite] Persist failed, will retry:', err)
       this._scheduleSave()
     }
-  }
-
-  private _persistSync(): void {
-    if (!this.db) return
-    this.dirty = false
-    const data = this.db.export()
-    void saveDatabaseToIDB(data)
   }
 
   // ── Row Mapping ──
@@ -330,6 +346,18 @@ class DebateDB {
     ).map((r) => this._rowToDebate(r))
   }
 
+  getDebatesPage(limit: number, offset: number): StoredDebate[] {
+    return this._queryAll<Record<string, unknown>>(
+      'SELECT * FROM debates ORDER BY created_at DESC LIMIT ? OFFSET ?',
+      [limit, offset],
+    ).map((r) => this._rowToDebate(r))
+  }
+
+  getDebateCount(): number {
+    const rows = this._queryAll<Record<string, unknown>>('SELECT COUNT(*) as cnt FROM debates')
+    return (rows[0]?.cnt as number) ?? 0
+  }
+
   getMessagesByDebateId(debateId: string): StoredMessage[] {
     return this._queryAll<Record<string, unknown>>(
       'SELECT * FROM messages WHERE debate_id = ? ORDER BY timestamp',
@@ -337,11 +365,24 @@ class DebateDB {
     ).map((r) => this._rowToMessage(r))
   }
 
-  insertDebate(debate: StoredDebate): void {
-    this._run(
-      `INSERT INTO debates (id, topic, mode, status, participants, max_rounds, actual_rounds, message_count, created_at, completed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
+  /**
+   * Atomically saves a debate with all its messages and reference files
+   * in a single transaction. Either everything succeeds or nothing is written.
+   */
+  saveDebateBundle(
+    debate: StoredDebate,
+    messages: StoredMessage[],
+    referenceFiles?: StoredReferenceFile[],
+  ): void {
+    if (!this.db) throw new Error('Database not initialized')
+    this.db.run('BEGIN TRANSACTION')
+    try {
+      // Insert debate
+      const debateStmt = this.db.prepare(
+        `INSERT INTO debates (id, topic, mode, status, participants, max_rounds, actual_rounds, message_count, created_at, completed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      debateStmt.bind([
         debate.id,
         debate.topic,
         debate.mode,
@@ -352,20 +393,17 @@ class DebateDB {
         debate.messageCount,
         debate.createdAt,
         debate.completedAt,
-      ],
-    )
-  }
+      ])
+      debateStmt.step()
+      debateStmt.free()
 
-  insertMessages(messages: StoredMessage[]): void {
-    if (!this.db || messages.length === 0) return
-    this.db.run('BEGIN TRANSACTION')
-    try {
+      // Insert messages
       for (const msg of messages) {
-        const stmt = this.db.prepare(
+        const msgStmt = this.db.prepare(
           `INSERT INTO messages (id, debate_id, provider, content, round, timestamp, error, message_type, role_name)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        stmt.bind([
+        msgStmt.bind([
           msg.id,
           msg.debateId,
           msg.provider,
@@ -376,9 +414,32 @@ class DebateDB {
           msg.messageType ?? null,
           msg.roleName ?? null,
         ])
-        stmt.step()
-        stmt.free()
+        msgStmt.step()
+        msgStmt.free()
       }
+
+      // Insert reference files
+      if (referenceFiles) {
+        for (const file of referenceFiles) {
+          const fileStmt = this.db.prepare(
+            `INSERT INTO reference_files (id, debate_id, filename, mime_type, size, data, text_content, uploaded_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          fileStmt.bind([
+            file.id,
+            file.debateId,
+            file.filename,
+            file.mimeType,
+            file.size,
+            file.data,
+            file.textContent ?? null,
+            file.uploadedAt,
+          ])
+          fileStmt.step()
+          fileStmt.free()
+        }
+      }
+
       this.db.run('COMMIT')
       this._markDirty()
     } catch (err) {
@@ -391,15 +452,20 @@ class DebateDB {
     if (!this.db) return
     this.db.run('BEGIN TRANSACTION')
     try {
-      const stmt1 = this.db.prepare('DELETE FROM messages WHERE debate_id = ?')
+      const stmt1 = this.db.prepare('DELETE FROM reference_files WHERE debate_id = ?')
       stmt1.bind([id])
       stmt1.step()
       stmt1.free()
 
-      const stmt2 = this.db.prepare('DELETE FROM debates WHERE id = ?')
+      const stmt2 = this.db.prepare('DELETE FROM messages WHERE debate_id = ?')
       stmt2.bind([id])
       stmt2.step()
       stmt2.free()
+
+      const stmt3 = this.db.prepare('DELETE FROM debates WHERE id = ?')
+      stmt3.bind([id])
+      stmt3.step()
+      stmt3.free()
 
       this.db.run('COMMIT')
       this._markDirty()
@@ -407,22 +473,6 @@ class DebateDB {
       this.db.run('ROLLBACK')
       throw err
     }
-  }
-
-  insertReferenceFile(file: StoredReferenceFile): void {
-    this._run(
-      `INSERT INTO reference_files (id, filename, mime_type, size, data, text_content, uploaded_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        file.id,
-        file.filename,
-        file.mimeType,
-        file.size,
-        file.data,
-        file.textContent ?? null,
-        file.uploadedAt,
-      ],
-    )
   }
 }
 

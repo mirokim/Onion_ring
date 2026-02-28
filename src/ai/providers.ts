@@ -1,5 +1,8 @@
 import type { AIProvider, ApiMessage, ProviderResponse, ContentBlock } from '@/types'
 import { Capacitor } from '@capacitor/core'
+import { createLogger } from '@/lib/logger'
+
+const logger = createLogger('Providers')
 
 // ── Helpers for multimodal content ──
 
@@ -63,7 +66,72 @@ function toGeminiParts(content: string | ContentBlock[]): any[] {
 
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
-// ── Main dispatcher ──
+// ── Retry Logic ──
+
+interface FetchWithRetryOptions {
+  maxRetries?: number
+  initialDelayMs?: number
+  maxDelayMs?: number
+  backoffMultiplier?: number
+}
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit & FetchWithRetryOptions,
+  maxRetries = 3,
+): Promise<Response> {
+  const { initialDelayMs = 1000, maxDelayMs = 10000, backoffMultiplier = 2, ...fetchOptions } = options
+  let lastError: Error | null = null
+
+  for (let attemptCount = 0; attemptCount <= maxRetries; attemptCount++) {
+    try {
+      const response = await fetch(url, fetchOptions)
+
+      // Retry on 5xx or 429 (rate limit)
+      if (!response.ok && (response.status >= 500 || response.status === 429)) {
+        if (attemptCount < maxRetries) {
+          const delay = Math.min(
+            initialDelayMs * Math.pow(backoffMultiplier, attemptCount),
+            maxDelayMs,
+          )
+          const jitter = delay * 0.1 * Math.random()
+          
+          logger.warn(`API request failed with ${response.status}, retrying after ${delay}ms`, {
+            url,
+            status: response.status,
+            attempt: attemptCount + 1,
+          })
+          
+          await new Promise((resolve) => setTimeout(resolve, delay + jitter))
+          continue
+        }
+      }
+
+      return response
+    } catch (error) {
+      lastError = error as Error
+
+      // Only retry on network errors
+      if (attemptCount < maxRetries) {
+        const delay = Math.min(initialDelayMs * Math.pow(backoffMultiplier, attemptCount), maxDelayMs)
+        const jitter = delay * 0.1 * Math.random()
+        
+        logger.warn(`Network error on API request, retrying after ${delay}ms`, {
+          url,
+          error: (error as Error).message,
+          attempt: attemptCount + 1,
+        })
+        
+        await new Promise((resolve) => setTimeout(resolve, delay + jitter))
+        continue
+      }
+
+      throw error
+    }
+  }
+
+  throw new Error(`API request failed after ${maxRetries} retries: ${lastError?.message}`)
+}
 
 export async function callProvider(
   provider: AIProvider,
@@ -122,7 +190,7 @@ async function callOpenAI(
     })),
   ]
 
-  const res = await fetch(baseUrl, {
+  const res = await fetchWithRetry(baseUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -130,6 +198,8 @@ async function callOpenAI(
     },
     body: JSON.stringify({ model, messages: apiMessages, max_tokens: 2048 }),
     signal,
+    maxRetries: 3,
+    initialDelayMs: 1000,
   })
 
   const data = (await res.json()) as OpenAIResponse
@@ -172,7 +242,7 @@ async function callAnthropic(
     headers['anthropic-dangerous-direct-browser-access'] = 'true'
   }
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -182,6 +252,8 @@ async function callAnthropic(
       messages: filteredMessages,
     }),
     signal,
+    maxRetries: 3,
+    initialDelayMs: 1000,
   })
 
   const data = (await res.json()) as AnthropicResponse
@@ -236,7 +308,7 @@ async function callGemini(
     systemInstruction: { parts: [{ text: systemPrompt }] },
   }
 
-  const res = await fetch(
+  const res = await fetchWithRetry(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
       method: 'POST',
@@ -246,6 +318,8 @@ async function callGemini(
       },
       body: JSON.stringify(body),
       signal,
+      maxRetries: 3,
+      initialDelayMs: 1000,
     },
   )
 

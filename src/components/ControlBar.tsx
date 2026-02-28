@@ -19,18 +19,27 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export function ControlBar() {
-  const status = useDebateStore((s) => s.status)
-  const config = useDebateStore((s) => s.config)
-  const messages = useDebateStore((s) => s.messages)
-  const currentRound = useDebateStore((s) => s.currentRound)
-  const loadingProvider = useDebateStore((s) => s.loadingProvider)
-  const countdown = useDebateStore((s) => s.countdown)
-  const waitingForNext = useDebateStore((s) => s.waitingForNext)
-  const pauseDebate = useDebateStore((s) => s.pauseDebate)
-  const resumeDebate = useDebateStore((s) => s.resumeDebate)
-  const stopDebate = useDebateStore((s) => s.stopDebate)
-  const nextTurn = useDebateStore((s) => s.nextTurn)
-  const reset = useDebateStore((s) => s.reset)
+  // Optimized: Group related selectors to reduce re-renders
+  const { status, config, messages, currentRound, loadingProvider, countdown, waitingForNext } = useDebateStore(
+    (s) => ({
+      status: s.status,
+      config: s.config,
+      messages: s.messages,
+      currentRound: s.currentRound,
+      loadingProvider: s.loadingProvider,
+      countdown: s.countdown,
+      waitingForNext: s.waitingForNext,
+    }),
+  )
+  const { pauseDebate, resumeDebate, stopDebate, nextTurn, reset } = useDebateStore(
+    (s) => ({
+      pauseDebate: s.pauseDebate,
+      resumeDebate: s.resumeDebate,
+      stopDebate: s.stopDebate,
+      nextTurn: s.nextTurn,
+      reset: s.reset,
+    }),
+  )
   const [shareOk, setShareOk] = useState(false)
 
   const maxRounds = config?.maxRounds || 3

@@ -5,6 +5,7 @@ import { StatusBar, Style } from '@capacitor/status-bar'
 import { useDebateStore } from '@/stores/debateStore'
 import { useHistoryStore } from '@/stores/historyStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { Sidebar } from '@/components/Sidebar'
 import { TopicInput } from '@/components/TopicInput'
 import { ControlBar } from '@/components/ControlBar'
@@ -17,8 +18,11 @@ const isMobile = Capacitor.isNativePlatform() || window.innerWidth < 768
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile)
-  const status = useDebateStore((s) => s.status)
-  const topic = useDebateStore((s) => s.config?.topic)
+  // Optimized: Group debate store selectors
+  const { status, topic } = useDebateStore((s) => ({
+    status: s.status,
+    topic: s.config?.topic,
+  }))
   const selectedDebateId = useHistoryStore((s) => s.selectedDebateId)
   const theme = useSettingsStore((s) => s.theme)
 
@@ -67,6 +71,7 @@ export default function App() {
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="p-1.5 rounded-lg hover:bg-bg-hover text-text-muted hover:text-text-primary transition"
+            aria-label={sidebarOpen ? '사이드바 닫기' : '사이드바 열기'}
           >
             {sidebarOpen ? (
               <PanelLeftClose className="w-[18px] h-[18px]" />
@@ -97,17 +102,19 @@ export default function App() {
         </header>
 
         {/* Content */}
-        {isViewingHistory ? (
-          <HistoryViewer />
-        ) : !isDebating ? (
-          <TopicInput />
-        ) : (
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <ControlBar />
-            <DebateThread />
-            <UserIntervention />
-          </div>
-        )}
+        <ErrorBoundary>
+          {isViewingHistory ? (
+            <HistoryViewer />
+          ) : !isDebating ? (
+            <TopicInput />
+          ) : (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <ControlBar />
+              <DebateThread />
+              <UserIntervention />
+            </div>
+          )}
+        </ErrorBoundary>
       </main>
     </div>
   )

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Eye, EyeOff, Trash2, MessageSquare, History, Sun, Moon, Settings, X } from 'lucide-react'
+import { Eye, EyeOff, Trash2, MessageSquare, History, Sun, Moon, Settings, X, Loader2 } from 'lucide-react'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useHistoryStore } from '@/stores/historyStore'
 import { cn, formatTimestampUTC } from '@/lib/utils'
@@ -27,6 +27,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           <button
             onClick={onClose}
             className="p-1.5 hover:bg-bg-hover rounded-lg transition text-text-muted hover:text-text-primary"
+            aria-label="닫기"
           >
             <X className="w-4 h-4" />
           </button>
@@ -52,7 +53,8 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
 
 function ProviderCard({ provider }: { provider: AIProvider }) {
   const { configs, updateConfig } = useSettingsStore()
-  const config = configs[provider]
+  // Guard against missing configuration (tests/stores may initialize with empty object)
+  const config = configs[provider] ?? { enabled: false, apiKey: '', model: MODEL_OPTIONS[provider][0] }
   const [showKey, setShowKey] = useState(false)
 
   const color = PROVIDER_COLORS[provider]
@@ -135,15 +137,49 @@ function ProviderCard({ provider }: { provider: AIProvider }) {
 // ── History Section ──
 
 function HistorySection() {
-  const debates = useHistoryStore((s) => s.debates)
-  const selectDebate = useHistoryStore((s) => s.selectDebate)
-  const deleteDebate = useHistoryStore((s) => s.deleteDebate)
-  const loadDebates = useHistoryStore((s) => s.loadDebates)
+  // Optimized: Group related historyStore selectors to reduce re-renders
+  const { debates, selectDebate, deleteDebate, loadDebates, loadMore, hasMore, isLoading, error, clearError } = useHistoryStore(
+    (s) => ({
+      debates: s.debates,
+      selectDebate: s.selectDebate,
+      deleteDebate: s.deleteDebate,
+      loadDebates: s.loadDebates,
+      loadMore: s.loadMore,
+      hasMore: s.hasMore,
+      isLoading: s.isLoading,
+      error: s.error,
+      clearError: s.clearError,
+    }),
+  )
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [initialLoad, setInitialLoad] = useState(true)
 
   useEffect(() => {
-    void loadDebates()
-  }, [loadDebates])
+    void loadDebates().finally(() => setInitialLoad(false))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (error) {
+    return (
+      <div className="px-5 py-6 text-center">
+        <p className="text-xs text-error mb-2">{error}</p>
+        <button
+          onClick={() => { clearError(); void loadDebates() }}
+          className="text-[11px] text-accent hover:underline"
+        >
+          다시 시도
+        </button>
+      </div>
+    )
+  }
+
+  if (initialLoad && isLoading) {
+    return (
+      <div className="px-5 py-10 text-center">
+        <Loader2 className="w-6 h-6 text-text-muted/40 mx-auto mb-3 animate-spin" />
+        <p className="text-xs text-text-muted">불러오는 중...</p>
+      </div>
+    )
+  }
 
   if (debates.length === 0) {
     return (
@@ -152,6 +188,12 @@ function HistorySection() {
         <p className="text-xs text-text-muted">아직 저장된 토론이 없습니다</p>
       </div>
     )
+  }
+
+  const handleDelete = (e: React.MouseEvent, id: string, topic: string) => {
+    e.stopPropagation()
+    const confirmed = window.confirm(`"${topic}" 토론 기록을 삭제하시겠습니까?\n삭제 후 복구할 수 없습니다.`)
+    if (confirmed) void deleteDebate(id)
   }
 
   return (
@@ -193,10 +235,7 @@ function HistorySection() {
             {/* Delete button on hover */}
             {hoveredId === d.id && (
               <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  void deleteDebate(d.id)
-                }}
+                onClick={(e) => handleDelete(e, d.id, d.topic)}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 hover:bg-error/15 rounded-lg transition text-text-muted hover:text-error"
                 title="삭제"
               >
@@ -206,6 +245,16 @@ function HistorySection() {
           </div>
         )
       })}
+
+      {/* Load more */}
+      {hasMore && (
+        <button
+          onClick={() => void loadMore()}
+          className="w-full py-2.5 text-[11px] text-accent hover:text-accent/80 transition font-medium"
+        >
+          더 보기
+        </button>
+      )}
     </div>
   )
 }
@@ -230,12 +279,12 @@ function ThemeToggle() {
 
 function ProviderStatusBadges() {
   const configs = useSettingsStore((s) => s.configs)
-  const enabledCount = PROVIDERS.filter((p) => configs[p].enabled && configs[p].apiKey.trim()).length
+  const enabledCount = PROVIDERS.filter((p) => configs[p]?.enabled && configs[p].apiKey.trim()).length
 
   return (
     <div className="flex items-center gap-1.5">
       {PROVIDERS.map((p) => {
-        const c = configs[p]
+        const c = configs[p] ?? { enabled: false, apiKey: '' }
         const active = c.enabled && c.apiKey.trim()
         return (
           <div

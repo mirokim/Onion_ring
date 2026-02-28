@@ -8,6 +8,7 @@ import type {
 } from '@/types'
 import { generateId } from '@/lib/utils'
 import { runDebate } from '@/ai/debateEngine'
+import { exportDebateAsMarkdown } from '@/lib/debateExport'
 import { useSettingsStore } from './settingsStore'
 import { useHistoryStore } from './historyStore'
 
@@ -20,20 +21,23 @@ function saveToHistory(
   status: 'completed' | 'stopped',
 ) {
   if (messages.length === 0) return
-  void useHistoryStore.getState().saveDebate(
-    {
-      topic: config.topic,
-      mode: config.mode,
-      status,
-      participants: config.participants,
-      maxRounds: config.maxRounds,
-      actualRounds: currentRound,
-      messageCount: messages.length,
-      createdAt: messages[0]!.timestamp,
-    },
-    messages,
-    config.referenceFiles,
-  )
+
+  const debateInfo = {
+    topic: config.topic,
+    mode: config.mode,
+    status,
+    participants: config.participants,
+    maxRounds: config.maxRounds,
+    actualRounds: currentRound,
+    messageCount: messages.length,
+    createdAt: messages[0]!.timestamp,
+  } as const
+
+  // Save to SQLite DB
+  void useHistoryStore.getState().saveDebate(debateInfo, messages, config.referenceFiles)
+
+  // Also export as .md file (native only, fire-and-forget)
+  void exportDebateAsMarkdown(debateInfo, messages)
 }
 
 interface DebateState {

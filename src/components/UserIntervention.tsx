@@ -1,23 +1,10 @@
 import { useState, useRef } from 'react'
 import { Send, Paperclip, X, FileText, Camera as CameraIcon, ImagePlus } from 'lucide-react'
 import { useDebateStore } from '@/stores/debateStore'
-import { generateId } from '@/lib/utils'
 import { isCameraAvailable, capturePhoto, pickFromGallery } from '@/lib/camera'
+import { processFileList, formatFileSize } from '@/lib/fileHandling'
+import { FILE_HANDLING } from '@/constants'
 import type { ReferenceFile } from '@/types'
-
-const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
-const MAX_FILES = 5
-const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/pdf']
-const ACCEPTED_EXTENSIONS = '.png,.jpg,.jpeg,.gif,.webp,.pdf'
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
 
 export function UserIntervention() {
   const status = useDebateStore((s) => s.status)
@@ -45,25 +32,15 @@ export function UserIntervention() {
 
   const handleFileUpload = async (fileList: FileList | null) => {
     if (!fileList) return
-    const newFiles: ReferenceFile[] = []
-
-    for (const file of Array.from(fileList)) {
-      if (!ACCEPTED_TYPES.includes(file.type)) continue
-      if (file.size > MAX_FILE_SIZE) continue
-      if (files.length + newFiles.length >= MAX_FILES) break
-
-      const dataUrl = await readFileAsDataUrl(file)
-      newFiles.push({
-        id: generateId(),
-        filename: file.name,
-        mimeType: file.type,
-        size: file.size,
-        dataUrl,
-      })
-    }
+    const { files: newFiles, errors } = await processFileList(fileList, files.length)
 
     if (newFiles.length > 0) {
       setFiles((prev) => [...prev, ...newFiles])
+    }
+
+    // Optionally log errors for debugging
+    if (errors.length > 0) {
+      console.warn('[UserIntervention] File errors:', errors)
     }
   }
 
@@ -72,13 +49,13 @@ export function UserIntervention() {
   }
 
   const handleCamera = async () => {
-    if (files.length >= MAX_FILES) return
+    if (files.length >= FILE_HANDLING.MAX_FILES) return
     const file = await capturePhoto()
     if (file) setFiles((prev) => [...prev, file])
   }
 
   const handleGallery = async () => {
-    if (files.length >= MAX_FILES) return
+    if (files.length >= FILE_HANDLING.MAX_FILES) return
     const file = await pickFromGallery()
     if (file) setFiles((prev) => [...prev, file])
   }
@@ -86,7 +63,7 @@ export function UserIntervention() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (!disabled && files.length < MAX_FILES) {
+    if (!disabled && files.length < FILE_HANDLING.MAX_FILES) {
       void handleFileUpload(e.dataTransfer.files)
     }
   }
@@ -112,9 +89,10 @@ export function UserIntervention() {
                   src={file.dataUrl}
                   alt={file.filename}
                   className="w-14 h-14 object-cover rounded-xl border border-border"
+                  title={`${file.filename} (${formatFileSize(file.size)})`}
                 />
               ) : (
-                <div className="w-14 h-14 flex flex-col items-center justify-center bg-bg-surface rounded-xl border border-border">
+                <div className="w-14 h-14 flex flex-col items-center justify-center bg-bg-surface rounded-xl border border-border" title={`${file.filename} (${formatFileSize(file.size)})`}>
                   <FileText className="w-5 h-5 text-text-muted" />
                   <span className="text-[7px] text-text-muted mt-0.5">PDF</span>
                 </div>
@@ -135,10 +113,10 @@ export function UserIntervention() {
         {/* Attach Button */}
         <button
           onClick={() => {
-            if (disabled || files.length >= MAX_FILES) return
+            if (disabled || files.length >= FILE_HANDLING.MAX_FILES) return
             fileInputRef.current?.click()
           }}
-          disabled={disabled || files.length >= MAX_FILES}
+          disabled={disabled || files.length >= FILE_HANDLING.MAX_FILES}
           className="p-2 text-text-muted hover:text-accent rounded-xl hover:bg-bg-hover disabled:opacity-25 disabled:cursor-not-allowed transition shrink-0"
           title="파일 첨부 (이미지, PDF)"
         >
@@ -146,7 +124,7 @@ export function UserIntervention() {
         </button>
 
         {/* Native Camera/Gallery */}
-        {isCameraAvailable() && !disabled && files.length < MAX_FILES && (
+        {isCameraAvailable() && !disabled && files.length < FILE_HANDLING.MAX_FILES && (
           <>
             <button
               onClick={() => void handleCamera()}
@@ -195,7 +173,7 @@ export function UserIntervention() {
       <input
         ref={fileInputRef}
         type="file"
-        accept={ACCEPTED_EXTENSIONS}
+        accept={FILE_HANDLING.ACCEPTED_EXTENSIONS}
         multiple
         className="hidden"
         onChange={(e) => {

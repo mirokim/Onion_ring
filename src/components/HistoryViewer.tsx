@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { X, MessageSquare, Clock, Share2, Copy, Check } from 'lucide-react'
 import { useHistoryStore } from '@/stores/historyStore'
 import { MessageBubble } from './MessageBubble'
@@ -14,10 +14,13 @@ const MODE_LABELS: Record<string, string> = {
 }
 
 export function HistoryViewer() {
-  const selectedDebateId = useHistoryStore((s) => s.selectedDebateId)
-  const selectedMessages = useHistoryStore((s) => s.selectedMessages)
-  const debates = useHistoryStore((s) => s.debates)
-  const clearSelection = useHistoryStore((s) => s.clearSelection)
+  // Optimized: Group historyStore selectors
+  const { selectedDebateId, selectedMessages, debates, clearSelection } = useHistoryStore((s) => ({
+    selectedDebateId: s.selectedDebateId,
+    selectedMessages: s.selectedMessages,
+    debates: s.debates,
+    clearSelection: s.clearSelection,
+  }))
   const [shareStatus, setShareStatus] = useState<'idle' | 'copied' | 'shared' | 'failed'>('idle')
 
   const debate = debates.find((d) => d.id === selectedDebateId)
@@ -37,44 +40,30 @@ export function HistoryViewer() {
     roleName: m.roleName,
   }))
 
+  const shareableText = useMemo(() => formatDebateForShare(
+    debate.topic,
+    debate.mode,
+    debate.participants,
+    selectedMessages.map((m) => ({
+      provider: m.provider,
+      content: m.content,
+      round: m.round,
+      error: m.error,
+    })),
+    dateStr,
+  ), [debate, selectedMessages, dateStr])
+
   const handleShare = async () => {
-    const text = formatDebateForShare(
-      debate.topic,
-      debate.mode,
-      debate.participants,
-      selectedMessages.map((m) => ({
-        provider: m.provider,
-        content: m.content,
-        round: m.round,
-        error: m.error,
-      })),
-      dateStr,
-    )
-
-    const result = await shareText(`AI 토론: ${debate.topic}`, text)
+    const result = await shareText(`AI 토론: ${debate.topic}`, shareableText)
     setShareStatus(result)
-
     if (result !== 'failed') {
       setTimeout(() => setShareStatus('idle'), 2500)
     }
   }
 
   const handleCopy = async () => {
-    const text = formatDebateForShare(
-      debate.topic,
-      debate.mode,
-      debate.participants,
-      selectedMessages.map((m) => ({
-        provider: m.provider,
-        content: m.content,
-        round: m.round,
-        error: m.error,
-      })),
-      dateStr,
-    )
-
     try {
-      await navigator.clipboard.writeText(text)
+      await navigator.clipboard.writeText(shareableText)
       setShareStatus('copied')
       setTimeout(() => setShareStatus('idle'), 2500)
     } catch {

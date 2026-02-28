@@ -53,7 +53,7 @@ export function ArtworkInput() {
   const [maxRounds, setMaxRounds] = useState(2)
   const [selectedProviders, setSelectedProviders] = useState<AIProvider[]>([])
   const [roles, setRoles] = useState<RoleConfig[]>([])
-  const [pacingMode, setPacingMode] = useState<PacingMode>('auto')
+  const [pacingMode, setPacingMode] = useState<PacingMode>('manual')
   const [autoDelay, setAutoDelay] = useState(5)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
